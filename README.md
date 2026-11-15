@@ -27,12 +27,9 @@ Works on **Windows**, **Linux**, and **SteamOS** (Desktop Mode, e.g. on a Steam 
 ### Windows
 
 1. Install [Python 3.9+ from python.org](https://www.python.org/downloads/) and keep **“tcl/tk and IDLE”** ticked in the installer (it ships Tkinter).
-2. Download/clone this repository.
-3. In a terminal in the repo folder:
-   ```bat
-   pip install -r requirements.txt
-   python run.py
-   ```
+2. Download/clone this repository (green **Code → Download ZIP** works fine — unzip it).
+3. **Double-click `run.bat`** — it creates a virtual environment, installs dependencies on first run, then opens the app.
+   (Or do it manually in a terminal: `pip install -r requirements.txt` then `python run.py`.)
 4. (Optional) Build a stand-alone `MangaReadDownloader.exe`:
    ```bat
    packaging\build_windows.bat
@@ -49,7 +46,7 @@ Tkinter comes from your distro (not from pip), so install it once:
 | Fedora | `sudo dnf install python3-tkinter` |
 | Arch / Manjaro | `sudo pacman -S tk` |
 
-Then:
+Then either double-click **`run.sh`** in your file manager (it creates/reuses a `.venv` and installs dependencies on first run), or do it manually:
 
 ```bash
 git clone <repo-url> && cd mangaread-downloader
@@ -67,14 +64,16 @@ SteamOS is Arch-based with a read-only root. Recommended path (no system changes
 ```bash
 # Desktop Mode → Konsole
 sudo steamos-readonly disable          # needed only for the tk package
-sudo pacman -S --needed tk
+sudo pacman -S --needed tk python
 sudo steamos-readonly enable           # optional: re-lock the root fs
 
 git clone <repo-url> ~/mangaread-downloader && cd ~/mangaread-downloader
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python3 run.py
+chmod +x run.sh                        # only needed once
+./run.sh                               # or just double-click run.sh in Dolphin
 ```
+
+Double-clicking `run.sh` in Dolphin asks whether to execute the file — choose **Execute**.
+The launcher creates a `.venv`, installs the dependencies on first run, then opens the app.
 
 Prefer a **single self-contained binary** instead of touching the system? Build it in Desktop Mode:
 
