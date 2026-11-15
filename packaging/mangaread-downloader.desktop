@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=MangaRead Downloader
+GenericName=Manga Downloader
+Comment=Download chapters from mangaread.org as .cbz files (with cover art)
+Exec=mangaread-downloader
+TryExec=mangaread-downloader
+Icon=mangaread-downloader
+Terminal=false
+Categories=Graphics;Network;FileTransfer;Utility;
+Keywords=manga;manhwa;manhua;cbz;downloader;comic;
+StartupNotify=true
+StartupWMClass=mangaread-downloader

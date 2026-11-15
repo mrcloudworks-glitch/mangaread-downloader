@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mangaread-downloader"
+version = "1.0.0"
+description = "Cross-platform GUI to download chapters from mangaread.org as .cbz files (with cover art)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "mangaread-downloader contributors" }]
+keywords = ["manga", "manhwa", "cbz", "downloader", "mangaread", "comic"]
+classifiers = [
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "requests>=2.28",
+    "beautifulsoup4>=4.11",
+]
+
+[project.optional-dependencies]
+# Cover thumbnail preview in the GUI. The app works without it.
+pillow = ["Pillow>=9.0"]
+dev = ["pytest>=7.0", "Pillow>=9.0"]
+
+[project.scripts]
+mangaread-downloader = "mangaread_downloader.__main__:main"
+
+[tool.setuptools]
+packages = ["mangaread_downloader"]
+
+[tool.setuptools.package-data]
+mangaread_downloader = ["py.typed", "assets/*.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

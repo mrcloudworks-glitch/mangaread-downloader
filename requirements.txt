@@ -1,0 +1,4 @@
+requests>=2.28
+beautifulsoup4>=4.11
+# Optional but recommended: cover thumbnail preview inside the GUI
+Pillow>=9.0

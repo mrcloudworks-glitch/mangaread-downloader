@@ -1,0 +1,32 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# PyInstaller
+build/
+dist/
+*.spec~
+
+# Installer artifacts
+*.exe
+*.msi
+*.AppImage
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local working files
+*.cbz
+*.cbz.part
+*.log
