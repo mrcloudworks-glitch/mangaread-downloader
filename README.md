@@ -12,7 +12,7 @@ Works on **Windows**, **Linux**, and **SteamOS** (Desktop Mode, e.g. on a Steam 
 ## Features
 
 - **Single Chapter mode** — paste a chapter URL, get exactly one `.cbz`.
-- **Bulk Download mode** — paste a manga URL, download all (or a range / a hand-picked subset of) chapters, each as its own `.cbz`.
+- **Bulk Download mode** — paste a manga URL, download all (or a range / a hand-picked subset of) chapters, **merged into a single `.cbz` by default** (or one `.cbz` per chapter — toggle in Settings).
 - **.cbz output** — every file starts with the series cover (`000_cover.*`, taken from the source page) followed by the pages in reading order, plus embedded **ComicInfo.xml** metadata (series, number, writer, genre…) that manga readers such as ComicRack, Komga, Panel Flow or Mihon/Tachiyomi understand.
 - **Smart UI** — load the chapter list, tick/untick chapters, pick a numeric range, cover thumbnail preview, overall + per-page progress bars, live log, cancellable downloads.
 - **Resume-friendly** — chapters whose `.cbz` already exists are skipped (toggleable).
@@ -27,12 +27,9 @@ Works on **Windows**, **Linux**, and **SteamOS** (Desktop Mode, e.g. on a Steam 
 ### Windows
 
 1. Install [Python 3.9+ from python.org](https://www.python.org/downloads/) and keep **“tcl/tk and IDLE”** ticked in the installer (it ships Tkinter).
-2. Download/clone this repository.
-3. In a terminal in the repo folder:
-   ```bat
-   pip install -r requirements.txt
-   python run.py
-   ```
+2. Download/clone this repository (green **Code → Download ZIP** works fine — unzip it).
+3. **Double-click `run.bat`** — it creates a virtual environment, installs dependencies on first run, then opens the app.
+   (Or do it manually in a terminal: `pip install -r requirements.txt` then `python run.py`.)
 4. (Optional) Build a stand-alone `MangaReadDownloader.exe`:
    ```bat
    packaging\build_windows.bat
@@ -49,7 +46,7 @@ Tkinter comes from your distro (not from pip), so install it once:
 | Fedora | `sudo dnf install python3-tkinter` |
 | Arch / Manjaro | `sudo pacman -S tk` |
 
-Then:
+Then either double-click **`run.sh`** in your file manager (it creates/reuses a `.venv` and installs dependencies on first run), or do it manually:
 
 ```bash
 git clone <repo-url> && cd mangaread-downloader
@@ -67,14 +64,16 @@ SteamOS is Arch-based with a read-only root. Recommended path (no system changes
 ```bash
 # Desktop Mode → Konsole
 sudo steamos-readonly disable          # needed only for the tk package
-sudo pacman -S --needed tk
+sudo pacman -S --needed tk python
 sudo steamos-readonly enable           # optional: re-lock the root fs
 
 git clone <repo-url> ~/mangaread-downloader && cd ~/mangaread-downloader
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python3 run.py
+chmod +x run.sh                        # only needed once
+./run.sh                               # or just double-click run.sh in Dolphin
 ```
+
+Double-clicking `run.sh` in Dolphin asks whether to execute the file — choose **Execute**.
+The launcher creates a `.venv`, installs the dependencies on first run, then opens the app.
 
 Prefer a **single self-contained binary** instead of touching the system? Build it in Desktop Mode:
 
@@ -102,22 +101,24 @@ Install a desktop entry/icon: `packaging/install_desktop.sh`
 Output layout (a subfolder per series):
 
 ```
-<output>/Hundred Years Game/Hundred Years Game - Chapter 001.cbz
+<output>/Hundred Years Game/Hundred Years Game - Chapters 001-010.cbz   ← bulk merge (default)
+                            Hundred Years Game - Chapter 001.cbz        ← split mode
                             Hundred Years Game - Chapter 002.cbz
-                            ...
 ```
 
 Each `.cbz` is a standard ZIP comic archive:
 
 ```
 000_cover.png   ← series cover, from the source page
-001.jpg         ← page 1
-002.jpg         ← page 2
+0001.jpg        ← page 1 (continuous numbering across merged chapters)
+0002.jpg        ← page 2
 …
-ComicInfo.xml   ← Series, Number, Writer, Genre, Web, PageCount…
+ComicInfo.xml   ← Series, Writer, Genre, Web, PageCount… (Number is set per chapter)
 ```
 
-Settings (delay between requests, timeout, retries, skip-existing, open folder when done) persist to a per-user config file: `%APPDATA%\MangaReadDownloader\config.json` on Windows, `~/.config/mangaread-downloader/config.json` on Linux/SteamOS. Logs go to the same folder (`mangaread-downloader.log`).
+In **merged bulk mode** every selected chapter is concatenated into one archive (cover first, continuous page numbering, `ComicInfo.xml` for the collection — titled *“… - Complete Collection”* when you select everything). If a chapter can’t be fetched, it’s reported in the log and left out — the merged file is still built from the rest. Turn **“Merge all selected bulk chapters into ONE .cbz file”** off in *Settings* (or pass `--no-merge` on the CLI) to get one `.cbz` per chapter instead.
+
+Settings (delay between requests, timeout, retries, skip-existing, merged bulk output, open folder when done) persist to a per-user config file: `%APPDATA%\MangaReadDownloader\config.json` on Windows, `~/.config/mangaread-downloader/config.json` on Linux/SteamOS. Logs go to the same folder (`mangaread-downloader.log`).
 
 ### CLI (no GUI)
 
@@ -126,7 +127,10 @@ mangaread-downloader --cli https://www.mangaread.org/manga/hundred-years-game/  
 mangaread-downloader --cli https://www.mangaread.org/manga/hundred-years-game/ -c 1-10  # a range
 mangaread-downloader --cli https://www.mangaread.org/manga/hundred-years-game/chapter-3/  # single chapter
 mangaread-downloader --cli <url> -o /path/to/folder                                      # custom output dir
+mangaread-downloader --cli <url> --no-merge                                               # one .cbz per chapter
 ```
+
+Bulk CLI downloads also merge into a single `.cbz` (e.g. `Hundred Years Game - Chapters 001-010.cbz`) unless `--no-merge` is passed.
 
 ---
 

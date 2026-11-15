@@ -12,8 +12,10 @@ from mangaread_downloader.config import Settings
 from mangaread_downloader.downloader import (
     DownloadCallbacks,
     DownloadManager,
+    build_collection_comic_info,
     build_comic_info,
     chapter_cbz_path,
+    merged_cbz_path,
 )
 from mangaread_downloader.models import ChapterInfo, MangaInfo
 
@@ -45,14 +47,22 @@ def sample_chapter() -> ChapterInfo:
 
 
 class FakeScraper:
-    """Stand-in for MangaReadScraper serving fixtures/fake bytes."""
+    """Stand-in for MangaReadScraper serving fixtures/fake bytes.
 
-    def __init__(self, html: str = CHAPTER_HTML):
+    fail_chapters: URL fragments for which fetch_text should raise ScraperError.
+    """
+
+    def __init__(self, html: str = CHAPTER_HTML, fail_chapters: tuple[str, ...] = ()):
         self.html = html
+        self.fail_chapters = fail_chapters
         self.image_calls: list[str] = []
 
     def fetch_text(self, url: str) -> str:
-        assert "chapter-1" in url
+        for fragment in self.fail_chapters:
+            if fragment in url:
+                from mangaread_downloader.scraper import ScraperError
+                raise ScraperError(f"simulated failure for {url}")
+        assert "chapter-" in url
         return self.html
 
     def fetch_bytes_with_type(self, url: str):
@@ -161,3 +171,137 @@ def test_parse_chapter_filter():
     assert parse_chapter_filter("10-5") == [(5.0, 10.0)]  # reversed bounds are tolerated
     with pytest.raises(ValueError):
         parse_chapter_filter("abc")
+
+
+# ------------------------------------------------------------- merged bulk
+
+def two_chapters():
+    return [
+        ChapterInfo(title="Chapter 1",
+                    url="https://www.mangaread.org/manga/sample/chapter-1/", number=1.0),
+        ChapterInfo(title="Chapter 2",
+                    url="https://www.mangaread.org/manga/sample/chapter-2/", number=2.0),
+    ]
+
+
+def manga_with_chapters():
+    manga = sample_manga()
+    manga.chapters = two_chapters()
+    return manga
+
+
+def test_merged_cbz_path_naming():
+    chapters = [ChapterInfo(title="Chapter 2.5",
+                            url="https://www.mangaread.org/manga/sample/chapter-2.5/", number=2.5),
+                ChapterInfo(title="Chapter 3",
+                            url="https://www.mangaread.org/manga/sample/chapter-3/", number=3.0)]
+    path = merged_cbz_path(sample_manga(), chapters, Path("/out"))
+    assert path.name == "Sample_ The_Best_ Manga - Chapters 002.5-003.cbz"
+    assert path.parent.name == "Sample_ The_Best_ Manga"
+
+
+def test_build_collection_comic_info():
+    import xml.etree.ElementTree as ET
+
+    manga = manga_with_chapters()
+    chapters = two_chapters()
+    data = build_collection_comic_info(manga, chapters, page_count=90)
+    root = ET.fromstring(data)
+    assert root.tag == "ComicInfo"
+    assert root.findtext("Series") == manga.title
+    assert "Complete Collection" in (root.findtext("Title") or "")
+    assert root.findtext("PageCount") == "90"
+    assert root.findtext("Count") == "2"
+
+
+def test_merged_download_builds_single_cbz(tmp_path):
+    settings = Settings(output_dir=str(tmp_path), skip_existing=False, delay=0)
+    fake = FakeScraper()
+    manager = make_manager(settings, fake)
+    callbacks, _messages = collect_callbacks()
+
+    manga = manga_with_chapters()
+    summary = manager.download_merged(manga, two_chapters(), tmp_path,
+                                      threading.Event(), callbacks)
+
+    assert summary.merged_path is not None and summary.merged_path.exists()
+    assert summary.succeeded == 2 and not summary.failed
+    assert summary.merged_path.name == "Sample_ The_Best_ Manga - Chapters 001-002.cbz"
+
+    with ZipFile(summary.merged_path) as archive:
+        names = archive.namelist()
+        assert names[0].startswith("000_cover")
+        assert names[-1] == "ComicInfo.xml"
+        pages = names[1:-1]
+        # fake scraper serves jpeg bytes for every page, so all entries are .jpg
+        assert pages == [f"{i:04d}.jpg" for i in range(1, 9)]
+
+
+def test_merged_skip_existing(tmp_path):
+    settings = Settings(output_dir=str(tmp_path), skip_existing=True, delay=0)
+    fake = FakeScraper()
+    manager = make_manager(settings, fake)
+    callbacks, _ = collect_callbacks()
+
+    manga = manga_with_chapters()
+    first = manager.download_merged(manga, two_chapters(), tmp_path,
+                                    threading.Event(), callbacks)
+    assert first.merged_path is not None
+
+    calls_before = len(fake.image_calls)
+    second = manager.download_merged(manga, two_chapters(), tmp_path,
+                                     threading.Event(), callbacks)
+    assert second.succeeded == 0 and second.skipped == 2
+    assert second.merged_path == first.merged_path
+    assert len(fake.image_calls) == calls_before
+
+
+def test_merged_partial_chapter_failure_still_builds(tmp_path):
+    settings = Settings(output_dir=str(tmp_path), skip_existing=False, delay=0)
+    fake = FakeScraper(fail_chapters=("chapter-2",))
+    manager = make_manager(settings, fake)
+    callbacks, _ = collect_callbacks()
+
+    manga = manga_with_chapters()
+    summary = manager.download_merged(manga, two_chapters(), tmp_path,
+                                      threading.Event(), callbacks)
+
+    assert summary.merged_path is not None and summary.merged_path.exists()
+    assert summary.succeeded == 1
+    assert [ch.label for ch, _ in summary.failed] == ["Chapter 2"]
+
+    with ZipFile(summary.merged_path) as archive:
+        image_entries = [n for n in archive.namelist() if n != "ComicInfo.xml"]
+        assert len(image_entries) == 1 + 4  # cover + 4 pages (chapter 2 excluded)
+
+
+def test_merged_all_chapters_fail(tmp_path):
+    settings = Settings(output_dir=str(tmp_path), skip_existing=False, delay=0)
+    fake = FakeScraper(fail_chapters=("chapter-",))
+    manager = make_manager(settings, fake)
+    callbacks, _ = collect_callbacks()
+
+    manga = manga_with_chapters()
+    summary = manager.download_merged(manga, two_chapters(), tmp_path,
+                                      threading.Event(), callbacks)
+
+    assert summary.merged_path is None
+    assert len(summary.failed) == 2
+    assert list(tmp_path.rglob("*.cbz")) == []   # nothing half-written left behind
+    assert list(tmp_path.rglob("*.part")) == []
+
+
+def test_merged_cancel_discards_partial_file(tmp_path):
+    settings = Settings(output_dir=str(tmp_path), skip_existing=False, delay=0)
+    fake = FakeScraper()
+    manager = make_manager(settings, fake)
+    callbacks, _ = collect_callbacks()
+
+    manga = manga_with_chapters()
+    cancel = threading.Event()
+    cancel.set()
+    summary = manager.download_merged(manga, two_chapters(), tmp_path, cancel, callbacks)
+    assert summary.cancelled
+    assert summary.merged_path is None
+    assert list(tmp_path.rglob("*.cbz")) == []
+    assert list(tmp_path.rglob("*.part")) == []

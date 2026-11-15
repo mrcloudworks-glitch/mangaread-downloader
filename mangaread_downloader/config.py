@@ -24,8 +24,11 @@ class Settings:
     timeout: float = 30.0
     # How many times to retry a failed image/page before giving up.
     retries: int = 3
-    # Skip chapters whose .cbz already exists instead of re-downloading.
+    # Skip downloads whose target .cbz already exists instead of re-downloading.
     skip_existing: bool = True
+    # Bulk mode: merge all selected chapters into a single .cbz instead of
+    # producing one file per chapter.
+    merge_bulk: bool = True
     # Open the output folder when a batch finishes.
     open_folder_when_done: bool = False
     # Last download mode used in the GUI ('single' or 'bulk').
