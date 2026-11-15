@@ -12,7 +12,7 @@ Works on **Windows**, **Linux**, and **SteamOS** (Desktop Mode, e.g. on a Steam 
 ## Features
 
 - **Single Chapter mode** — paste a chapter URL, get exactly one `.cbz`.
-- **Bulk Download mode** — paste a manga URL, download all (or a range / a hand-picked subset of) chapters, each as its own `.cbz`.
+- **Bulk Download mode** — paste a manga URL, download all (or a range / a hand-picked subset of) chapters, **merged into a single `.cbz` by default** (or one `.cbz` per chapter — toggle in Settings).
 - **.cbz output** — every file starts with the series cover (`000_cover.*`, taken from the source page) followed by the pages in reading order, plus embedded **ComicInfo.xml** metadata (series, number, writer, genre…) that manga readers such as ComicRack, Komga, Panel Flow or Mihon/Tachiyomi understand.
 - **Smart UI** — load the chapter list, tick/untick chapters, pick a numeric range, cover thumbnail preview, overall + per-page progress bars, live log, cancellable downloads.
 - **Resume-friendly** — chapters whose `.cbz` already exists are skipped (toggleable).
@@ -101,22 +101,24 @@ Install a desktop entry/icon: `packaging/install_desktop.sh`
 Output layout (a subfolder per series):
 
 ```
-<output>/Hundred Years Game/Hundred Years Game - Chapter 001.cbz
+<output>/Hundred Years Game/Hundred Years Game - Chapters 001-010.cbz   ← bulk merge (default)
+                            Hundred Years Game - Chapter 001.cbz        ← split mode
                             Hundred Years Game - Chapter 002.cbz
-                            ...
 ```
 
 Each `.cbz` is a standard ZIP comic archive:
 
 ```
 000_cover.png   ← series cover, from the source page
-001.jpg         ← page 1
-002.jpg         ← page 2
+0001.jpg        ← page 1 (continuous numbering across merged chapters)
+0002.jpg        ← page 2
 …
-ComicInfo.xml   ← Series, Number, Writer, Genre, Web, PageCount…
+ComicInfo.xml   ← Series, Writer, Genre, Web, PageCount… (Number is set per chapter)
 ```
 
-Settings (delay between requests, timeout, retries, skip-existing, open folder when done) persist to a per-user config file: `%APPDATA%\MangaReadDownloader\config.json` on Windows, `~/.config/mangaread-downloader/config.json` on Linux/SteamOS. Logs go to the same folder (`mangaread-downloader.log`).
+In **merged bulk mode** every selected chapter is concatenated into one archive (cover first, continuous page numbering, `ComicInfo.xml` for the collection — titled *“… - Complete Collection”* when you select everything). If a chapter can’t be fetched, it’s reported in the log and left out — the merged file is still built from the rest. Turn **“Merge all selected bulk chapters into ONE .cbz file”** off in *Settings* (or pass `--no-merge` on the CLI) to get one `.cbz` per chapter instead.
+
+Settings (delay between requests, timeout, retries, skip-existing, merged bulk output, open folder when done) persist to a per-user config file: `%APPDATA%\MangaReadDownloader\config.json` on Windows, `~/.config/mangaread-downloader/config.json` on Linux/SteamOS. Logs go to the same folder (`mangaread-downloader.log`).
 
 ### CLI (no GUI)
 
@@ -125,7 +127,10 @@ mangaread-downloader --cli https://www.mangaread.org/manga/hundred-years-game/  
 mangaread-downloader --cli https://www.mangaread.org/manga/hundred-years-game/ -c 1-10  # a range
 mangaread-downloader --cli https://www.mangaread.org/manga/hundred-years-game/chapter-3/  # single chapter
 mangaread-downloader --cli <url> -o /path/to/folder                                      # custom output dir
+mangaread-downloader --cli <url> --no-merge                                               # one .cbz per chapter
 ```
+
+Bulk CLI downloads also merge into a single `.cbz` (e.g. `Hundred Years Game - Chapters 001-010.cbz`) unless `--no-merge` is passed.
 
 ---
 

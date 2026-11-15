@@ -99,12 +99,20 @@ class SettingsDialog(tk.Toplevel):
         ttk.Checkbutton(body, text="Open the output folder when a batch finishes",
                         variable=self.open_done_var).grid(row=6, column=0, columnspan=2, sticky="w", pady=2)
 
+        ttk.Label(body, text="Bulk output", font=("TkDefaultFont", 10, "bold")).grid(
+            row=7, column=0, columnspan=2, sticky="w", pady=(12, 6))
+
+        self.merge_bulk_var = tk.BooleanVar(value=self.settings.merge_bulk)
+        ttk.Checkbutton(body, text="Merge all selected bulk chapters into ONE .cbz file\n"
+                              "(off: one .cbz per chapter, as before)",
+                        variable=self.merge_bulk_var).grid(row=8, column=0, columnspan=2, sticky="w", pady=2)
+
         note = ttk.Label(body, text=("Every .cbz starts with the series cover image (000_cover)\n"
                                      "and carries ComicInfo.xml metadata."), foreground="#555555")
-        note.grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        note.grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
         buttons = ttk.Frame(body)
-        buttons.grid(row=8, column=0, columnspan=2, sticky="e", pady=(14, 0))
+        buttons.grid(row=10, column=0, columnspan=2, sticky="e", pady=(14, 0))
         ttk.Button(buttons, text="Cancel", command=self.destroy).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(buttons, text="Save", style="Accent.TButton", command=self._save).grid(row=0, column=1)
 
@@ -131,7 +139,9 @@ class SettingsDialog(tk.Toplevel):
             return
         self.settings.skip_existing = bool(self.skip_existing_var.get())
         self.settings.open_folder_when_done = bool(self.open_done_var.get())
+        self.settings.merge_bulk = bool(self.merge_bulk_var.get())
         save_settings(self.settings)
+        self.master_app._refresh_download_button_text()
         self.master_app.log_line("Settings saved.")
         self.destroy()
 
@@ -422,10 +432,16 @@ class MangaReadApp(tk.Tk):
         dim = "#888888" if not bulk else "#000000"
         self.range_label.configure(foreground=dim)
         self.range_to_label.configure(foreground=dim)
-        self.download_button.configure(
-            text="Start Bulk Download" if bulk else "Download Selected Chapter"
-        )
+        self._refresh_download_button_text()
         self._update_selection_label()
+
+    def _refresh_download_button_text(self) -> None:
+        if self.mode.get() == "bulk":
+            text = ("Start Bulk Download — Merge into 1 CBZ" if self.settings.merge_bulk
+                    else "Start Bulk Download — One CBZ per Chapter")
+        else:
+            text = "Download Selected Chapter"
+        self.download_button.configure(text=text)
 
     # --------------------------------------------------------- load flow
     def load_manga(self) -> None:
@@ -644,16 +660,19 @@ class MangaReadApp(tk.Tk):
         self.settings.output_dir = str(output)
         save_settings(self.settings)
 
+        use_merge = self.mode.get() == "bulk" and self.settings.merge_bulk
+
         self._busy = True
         self.cancel_event.clear()
         self._set_controls_running(True, loading=False)
         self.overall_bar["value"] = 0
         self.page_bar["value"] = 0
         self.status_var.set("Downloading…")
-        threading.Thread(target=self._download_worker, args=(self.manga, chapters, output),
+        threading.Thread(target=self._download_worker, args=(self.manga, chapters, output, use_merge),
                          daemon=True, name="download").start()
 
-    def _download_worker(self, manga: MangaInfo, chapters: list[ChapterInfo], output: Path) -> None:
+    def _download_worker(self, manga: MangaInfo, chapters: list[ChapterInfo], output: Path,
+                         use_merge: bool) -> None:
         manager = DownloadManager(self.settings)
 
         def on_log(message: str) -> None:
@@ -671,7 +690,10 @@ class MangaReadApp(tk.Tk):
         callbacks = DownloadCallbacks(on_log=on_log, on_chapter_start=on_chapter_start,
                                       on_page_progress=on_page_progress, on_chapter_done=on_chapter_done)
         try:
-            summary = manager.download_chapters(manga, chapters, output, self.cancel_event, callbacks)
+            if use_merge:
+                summary = manager.download_merged(manga, chapters, output, self.cancel_event, callbacks)
+            else:
+                summary = manager.download_chapters(manga, chapters, output, self.cancel_event, callbacks)
             self.msg_queue.put(("finished", summary))
         except Exception as exc:
             log.exception("Download batch failed")
@@ -737,6 +759,37 @@ class MangaReadApp(tk.Tk):
             self._set_controls_running(False)
             self.page_bar["value"] = 0
             self.page_label_var.set("Current chapter: —")
+
+            if summary.merged_path is not None:
+                # bulk mode merged to a single .cbz
+                if summary.succeeded == 0 and summary.skipped and not summary.failed:
+                    text = f"{summary.merged_path.name} already exists — skipped."
+                    self.overall_label_var.set(text)
+                    self.status_var.set(text)
+                    self.log_line(text)
+                    messagebox.showinfo("Bulk download", text, parent=self)
+                else:
+                    text = (f"Merged {summary.succeeded}/{summary.total} chapter(s) into "
+                            f"{summary.merged_path.name}")
+                    self.overall_label_var.set(text)
+                    self.status_var.set(text)
+                    self.log_line(f"{text}\nSaved to: {summary.merged_path}")
+                    if summary.failed:
+                        details = "\n".join(f"• {ch.label}: {err}" for ch, err in summary.failed[:10])
+                        messagebox.showwarning(
+                            "Merged — some chapters left out",
+                            f"Saved:\n{summary.merged_path}\n\nBut {len(summary.failed)} "
+                            f"chapter(s) could not be fetched and are missing from the file:\n\n"
+                            f"{details}", parent=self)
+                    else:
+                        messagebox.showinfo(
+                            "Bulk download complete",
+                            f"{summary.succeeded} chapter(s) merged into one file:\n\n"
+                            f"{summary.merged_path}", parent=self)
+                if self.settings.open_folder_when_done:
+                    self.open_output_folder()
+                return
+
             text = (f"Done: {summary.succeeded} downloaded, {summary.skipped} skipped, "
                     f"{len(summary.failed)} failed.")
             if summary.cancelled:

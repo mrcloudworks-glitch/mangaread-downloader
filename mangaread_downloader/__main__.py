@@ -24,6 +24,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--output", "-o", help="output directory (default: Downloads folder)")
     parser.add_argument("--chapters", "-c",
                         help="only these chapters, e.g. '1-10' or '1,3,7.5' (manga URLs only)")
+    parser.add_argument("--no-merge", action="store_true",
+                        help="bulk mode: one .cbz per chapter instead of a single merged .cbz")
     return parser.parse_args(argv)
 
 

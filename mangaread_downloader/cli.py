@@ -93,14 +93,28 @@ def run_cli(args) -> int:
         on_page_progress=lambda done, total: print(f"    page {done}/{total}", end="\r"),
     )
     manager = DownloadManager(settings)
+    merge = kind == "manga" and not args.no_merge  # single chapter URLs always produce one file
     try:
-        summary = manager.download_chapters(manga, chapters, output, cancel, callbacks)
+        if merge:
+            summary = manager.download_merged(manga, chapters, output, cancel, callbacks)
+        else:
+            summary = manager.download_chapters(manga, chapters, output, cancel, callbacks)
     except KeyboardInterrupt:
         cancel.set()
         print("\nInterrupted.")
         return 130
 
     print()
+    if summary.merged_path is not None:
+        if summary.succeeded == 0 and summary.skipped:
+            print(f"Already exists, leaving unchanged: {summary.merged_path}")
+        else:
+            print(f"Merged {summary.succeeded}/{summary.total} chapter(s) -> {summary.merged_path}")
+        if summary.failed:
+            for chapter, error in summary.failed:
+                print(f"  LEFT OUT {chapter.label}: {error}")
+            return 1
+        return 0
     print(f"Done: {summary.succeeded} downloaded, {summary.skipped} skipped, "
           f"{len(summary.failed)} failed.")
     if summary.failed:
